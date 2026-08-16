@@ -5,7 +5,41 @@
 
 ## 1. 一句话状态
 
-代码 / 数据 / Docker 沙盒 / 评估 harness 全部就绪并通过 mock 端到端验证;**真正的 RL 训练尚未启动**。当前正在 opsagent conda env 内安装训练依赖(torch / vllm / verl / ray),并用本机已起的 **Qwen3-8B**(vllm:8000)替代原计划的 Qwen3.5-9B。
+代码 / 数据 / Docker 沙盒 / 评估 harness 全部就绪;**verl GRPO 集成已完成并实测跑通训练管线**(rollout→Docker沙盒→OpsAgentLoop→多层奖励→val 指标 step:0 reward/mean@1≈9.4,LoRA actor backward 也跑通)。唯一剩余:colocate(2×A30)vllm↔actor 权重同步阶段差 ~20MB 显存,需切 separate 放置(3 卡:vllm GPU0/1 + actor GPU3)。
+
+## 10. 决策记录
+
+- 2026-08-16:模型从 Qwen3.5-9B 切到 **Qwen3-8B**(本机现成可用,权重在 `/path/to/Qwen3-8B`)。所有 train/eval 配置 `defaults: model` 已改为 `qwen3_8b`,`run_name` 同步改名。
+- 2026-08-16:训练依赖装在 `opsagent` conda env(Python 3.11),而非 pd_vllm(后者只跑 vllm serve)。
+- 2026-08-16:verl GRPO 集成方案 = 自定义 `OpsAgentLoop(AgentLoopBase)`(一轨迹一容器、loop内算reward,SWE-agent 模式),而非 verl 内置 ToolAgentLoop(后者 BaseTool 每次call create/release、不持久容器、且不调 calc_reward,不适配本任务)。
+- 2026-08-16:实测 2×A30 colocate 全参 8B 的 actor backward 放不下(差~1.5GB);改用 **LoRA(rank=32)** 后 backward 跑通,但 weight-sync 阶段 vllm(10.46GB)+actor(13.1GB)同卡重叠仍差~20MB。colocate-2卡到头,下一步切 **separate 放置**(vllm GPU0/1 TP=2、actor 独占 GPU3)。
+
+## 11. verl 集成实测历程(阻塞→解法)
+
+| 阻塞 | 解法 | 文件/位置 |
+|------|------|------|
+| `transfer_queue` 模块缺失 | 装独立包 `TransferQueue`(verl 未声明依赖) | env |
+| flash_attention_2 没装 | `+actor_rollout_ref.model.override_config.attn_implementation=sdpa` | verl_run_grpo.sh |
+| wandb 没 key | `WANDB_DISABLED=true` | verl_run_grpo.sh |
+| Ray worker 里 `ops_agent` 没注册 | 建 `configs/agent/ops_agent.yaml` + `agent_loop_config_path` 指过去(worker 加载即 instantiate→@register) | configs/agent/ops_agent.yaml |
+| vllm `max_model_len=40960` KV不够 | `rollout.max_model_len=8192` | verl_run_grpo.sh |
+| FSDP1 加载期整模 OOM | `actor.strategy=fsdp2`(per-param分片) | verl_run_grpo.sh |
+| 3卡 TP=3 | Qwen3-8B 32 heads 不被 3 整除 → TP 只能 1/2/4/8 | 故回 2卡 TP=2 |
+| 全参 backward OOM(~1.5GB) | `model.lora_rank=32`(LoRA,无全参梯度) | verl_run_grpo.sh |
+| weight-sync colocate 重叠 OOM(20MB) | **未解** → 需 separate 放置 | 下一步 |
+
+## 12. 启动/复现
+
+```bash
+# 环境已就绪(opsagent env 含 torch2.11+cu130/vllm0.23/verl0.9/TransferQueue0.1.9/ray)
+# 真实 GRPO 启动(当前 LoRA + 2卡 colocate,会跑到 weight-sync 才 OOM):
+bash scripts/verl_run_grpo.sh
+# 单测(不烧 GPU,验证 OpsAgentLoop 接线):
+PYTHONPATH=src /root/miniconda3/envs/opsagent/bin/python -m pytest tests/   # 10/10 pass
+# mock smoke(验证 harness,无模型):
+PYTHONPATH=src python3 -m train --smoke-test --mock --smoke-limit 10
+```
+下一步(解开 weight-sync OOM):配置 verl **separate_async** + resource_pool,把 rollout(vllm)放 GPU0/1、actor 放 GPU3,消除 colocate 同卡重叠。需研读 verl `_generated_ppo_trainer.yaml` 的 `enable_resource_pool` / `n_gpus_per_node` 分池配置。
 
 ## 2. 已完成 ✅
 
@@ -27,6 +61,8 @@
 - [ ] 启动 GRPO 真实训练(`bash scripts/train_grpo.sh`)
 - [ ] DAPO / PPO 训练
 - [ ] OpsBench 评估 + 出报告
+
+> **更新(2026-08-16)**:env 已装好;verl GRPO 集成已完成,rollout/reward/val 全跑通(step:0 val reward≈9.4),LoRA backward 跑通;最后卡在 colocate weight-sync 显存(详见 §1/§11)。待办见 §11 末尾。
 
 ## 4. 硬件与环境
 

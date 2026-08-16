@@ -27,7 +27,13 @@ runs/
 data/eval_report.json
 data/sft_*.jsonl
 data/sft_*.json
+data/*.parquet
 assets/figures/
+
+# --- verl/hydra run outputs ---
+outputs/
+checkpoints/
+
 
 # --- Type/coverage caches ---
 .pytest_cache/

@@ -1,0 +1,11 @@
+# Custom agent loops loaded by verl's AgentLoopWorker at init time.
+# Each item registers a name -> {_target_: FQN} in verl's _agent_loop_registry,
+# so ray worker processes (which never imported our module) can instantiate the
+# loop via hydra.utils.instantiate -> import verl_integration.ops_agent_loop
+# (which runs @register("ops_agent")).
+#
+# The list format matches AgentLoopWorker.__init__ (agent_loop.py:551-553):
+#   for agent_loop_config in agent_loop_configs:
+#       _agent_loop_registry[agent_loop_config.name] = agent_loop_config
+- name: ops_agent
+  _target_: verl_integration.ops_agent_loop.OpsAgentLoop

@@ -1,0 +1,94 @@
+# OpsAgent-RL — verl GRPO config (Qwen3-8B, 2xA30 colocated, multi-turn sandbox)
+#
+# This file documents the FULL intended verl config. The actual launch uses
+# verl's packaged `ppo_trainer` hydra config (verl/trainer/config/ppo_trainer.yaml)
+# + the CLI overrides below; see scripts/verl_run_grpo.sh. Keeping a readable
+# copy here so the knobs are grep-able without digging into verl's package.
+#
+# Key design:
+#   - reward computed INSIDE OpsAgentLoop (SWE-agent pattern); reward_model disabled,
+#     no external reward model. NaiveRewardManager sees rm_scores already set by
+#     the loop and skips compute_score (verl/.../reward_manager/abstract.py:64).
+#   - rollout = verl-managed vLLM, colocated with the actor on GPU0/1; weight sync
+#     via the "naive" colocated checkpoint engine (CUDA IPC, no separate rollout pool).
+#   - GRPO: adv_estimator=grpo, no critic, K=8 rollouts/prompt.
+
+trainer:
+  nnodes: 1
+  n_gpus_per_node: 2          # GPU0/1 colocated (GPU2/3 untouched)
+  use_v1: true
+  v1:
+    trainer_mode: sync        # colocated, simplest for single-node 2-GPU
+
+algorithm:
+  adv_estimator: grpo         # group-relative advantage, no critic
+  norm_adv_by_std_in_grpo: true
+  use_kl_in_reward: false
+  kl_ctrl:
+    type: fixed
+    kl_coef: 0.001
+
+actor_rollout_ref:
+  model:
+    path: /path/to/Qwen3-8B
+    tokenizer_path: /path/to/Qwen3-8B
+  actor:
+    use_kl_loss: false
+    policy_loss:
+      loss_mode: vanilla      # PPO clip
+    ppo_mini_batch_size: 8
+    ppo_micro_batch_size: 1
+    grad_clip: 1.0
+    optim:
+      lr: 1.0e-6
+      lr_warmup_steps: 30
+      lr_scheduler_type: cosine
+    fsdp:
+      fsdp_size: 2            # shard 8B across 2 A30
+    grad_clip: 1.0
+  rollout:
+    name: vllm
+    mode: async
+    n: 8                     # GRPO group size
+    prompt_length: 2048
+    response_length: 4096
+    gpu_memory_utilization: 0.45   # leave room for colocated actor (8B FSDP)
+    tensor_model_parallel_size: 2
+    data_parallel_size: 1
+    load_format: hf          # load real weights (not dummy) for the base policy
+    enable_prefix_caching: true
+    enable_chunked_prefill: true
+    free_cache_engine: true
+    checkpoint_engine:
+      backend: naive          # colocated weight sync
+    multi_turn:
+      max_assistant_turns: 20   # = task.max_steps
+      max_user_turns: 20
+      max_tool_response_length: 1024
+      tool_response_truncate_side: middle
+    agent:
+      num_workers: 4          # parallels container pools; bounded by Docker pool
+      default_agent_loop: ops_agent   # our registered AgentLoopBase subclass
+  ref:
+    log_prob: false           # no KL loss -> skip reference policy to save VRAM
+
+reward:
+  reward_model:
+    enable: false             # reward computed in-loop
+  reward_manager:
+    source: register
+    name: naive
+  num_workers: 4
+
+data:
+  train_files: data/train.parquet
+  val_files: data/val.parquet
+  train_batch_size: 8         # = ppo_mini_batch_size; effective prompts/step
+  gen_batch_size: 8
+  max_prompt_length: 2048
+  max_response_length: 4096
+  reward_fn_key: data_source
+
+# custom block read by OpsAgentLoop._sandbox_image (set via +opsenv.image=...)
+opsenv:
+  image: opsagent-sandbox:latest
