@@ -1,0 +1,38 @@
+FROM python:3.11-slim
+
+# Swap to a CN Debian mirror for faster apt installs during build.
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+    /etc/apt/sources.list.d/debian.sources 2>/dev/null || true && \
+    sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g; s|security.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+    /etc/apt/sources.list 2>/dev/null || true
+
+# Common system troubleshooting + service daemons (slim set).
+# Note: the *running* container has networking disabled, so every package a
+# scenario relies on must be installed here at build time.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget net-tools iputils-ping dnsutils procps \
+    nginx apache2 redis-server sqlite3 jq cron openssh-server \
+    mariadb-server iproute2 iptables rsyslog logrotate less vim-tiny \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Pre-install common Python troubleshooting helpers (use Tsinghua PyPI mirror).
+RUN pip3 install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple psutil pyyaml
+
+# One-time MariaDB data dir init (no systemd needed to run mysqld later).
+RUN mysql_install_db --user=mysql --datadir=/var/lib/mysql 2>/dev/null || true
+
+# Lightweight service launcher usable from any scenario (no systemd required).
+RUN printf '#!/bin/sh\ncase "$1" in\n' \
+'nginx) nginx 2>/dev/null || nginx -s reload ;;\n' \
+'apache2) apachectl start 2>/dev/null || apache2ctl start 2>/dev/null || (source /etc/apache2/envvars && apache2) ;;\n' \
+'redis) redis-server --daemonize yes ;;\n' \
+'mysql) mysqld --user=mysql --datadir=/var/lib/mysql & ;;\n' \
+'sshd) /usr/sbin/sshd ;;\n' \
+'cron) cron ;;\n' \
+'esac\n' > /usr/local/bin/svc && chmod +x /usr/local/bin/svc
+
+WORKDIR /workspace
+
+# Keep container alive; agent starts services on demand via `svc <name>`.
+CMD ["sleep", "infinity"]

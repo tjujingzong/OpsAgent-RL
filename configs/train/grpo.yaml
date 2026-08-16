@@ -1,0 +1,48 @@
+# GRPO training configuration for OpsAgent-RL
+defaults:
+  - model: qwen3_8b
+  - _self_
+
+algorithm:
+  type: "grpo"
+  num_generation_per_prompt: 8   # N rollouts per prompt
+  kl_coef: 0.001                 # low KL constraint -> larger policy moves
+  clip_range: 0.2
+  temperature: 1.0               # high temp -> explore diverse fix paths
+  top_p: 0.95
+
+rollout:
+  engine: "vllm"
+  tensor_parallel_size: 2
+  max_new_tokens: 4096
+  gpu_memory_utilization: 0.85
+
+train:
+  micro_batch_size: 1
+  gradient_accumulation_steps: 8   # effective batch = 8 prompts
+  learning_rate: 1.0e-6
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.1
+  max_steps: 300
+  bf16: true
+  save_interval: 50
+  eval_interval: 50
+
+data:
+  train_file: "data/train.jsonl"
+  val_file: "data/val.jsonl"
+  num_workers: 4
+
+env:
+  image: "opsagent-sandbox:latest"
+  max_steps_per_episode: 20
+  command_timeout: 15
+  episode_timeout: 300
+  parallel_envs: 4
+  pool_size: 4
+
+logging:
+  project: "opsagent-rl"
+  run_name: "grpo_qwen3_8b"
+  log_interval: 10
+  wandb_enabled: true

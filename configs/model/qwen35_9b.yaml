@@ -1,0 +1,16 @@
+# Model configuration for Qwen3.5-9B policy model
+model:
+  name: "Qwen/Qwen3.5-9B"
+  hf_path: "Qwen/Qwen3.5-9B"
+  tokenizer: "Qwen/Qwen3.5-9B"
+  use_flash_attention: true
+  dtype: "bf16"
+  # For low-VRAM fallback (see risk mitigation in planning doc)
+  # fallback: "Qwen/Qwen3.5-4B"
+
+context:
+  max_prompt_length: 2048
+  max_new_tokens: 4096
+  history_turns: 16        # keep last 16 conversation turns
+  observation_head: 200   # chars kept from start of long output
+  observation_tail: 300   # chars kept from end of long output

@@ -1,0 +1,38 @@
+# OpsBench evaluation configuration
+defaults:
+  - model: qwen3_8b
+  - _self_
+
+eval:
+  test_file: "data/test.jsonl"
+  num_scenarios: 100
+  # pass@k sampling
+  pass_k: [1, 2, 5]
+  temperature: 0.7            # slightly lower than training for eval stability
+  top_p: 0.95
+  max_new_tokens: 4096
+
+env:
+  image: "opsagent-sandbox:latest"
+  max_steps_per_episode: 20
+  command_timeout: 15
+  episode_timeout: 300
+  parallel_envs: 8           # more parallelism during eval (no grad)
+
+metrics:
+  - success_rate
+  - diagnostic_accuracy
+  - mean_steps_to_resolution
+  - command_efficiency
+  - pass_at_k
+
+baselines:
+  - "Qwen3-8B (base)"
+  - "Qwen3-8B + SFT"
+  - "Qwen3-8B + GRPO"
+  - "Qwen3-8B + DAPO"
+  - "Qwen3-8B + PPO"
+
+output:
+  results_dir: "assets/figures"
+  report_file: "data/eval_report.json"

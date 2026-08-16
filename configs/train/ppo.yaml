@@ -1,0 +1,57 @@
+# PPO training configuration for OpsAgent-RL
+# 2xA30 cannot fit a full independent critic; share backbone + independent value head.
+defaults:
+  - model: qwen3_8b
+  - _self_
+
+algorithm:
+  type: "ppo"
+  critic_shared_backbone: true    # shared backbone + independent value head
+  critic_lr: 1.0e-6
+  gae_lambda: 0.95
+  clip_range: 0.2
+  entropy_coef: 0.01
+  value_loss_coef: 0.5
+  kl_coef: 0.001
+  num_generation_per_prompt: 8
+  temperature: 1.0
+  top_p: 0.95
+  # Fallback: use Qwen3.5-4B as independent critic to save VRAM
+  # critic_model: "Qwen/Qwen3.5-4B"
+
+rollout:
+  engine: "vllm"
+  tensor_parallel_size: 2
+  max_new_tokens: 4096
+  gpu_memory_utilization: 0.8
+
+train:
+  micro_batch_size: 1
+  gradient_accumulation_steps: 8
+  actor_lr: 1.0e-6
+  critic_lr: 1.0e-6
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.1
+  max_steps: 300
+  bf16: true
+  save_interval: 50
+  eval_interval: 50
+
+data:
+  train_file: "data/train.jsonl"
+  val_file: "data/val.jsonl"
+  num_workers: 4
+
+env:
+  image: "opsagent-sandbox:latest"
+  max_steps_per_episode: 20
+  command_timeout: 15
+  episode_timeout: 300
+  parallel_envs: 4
+  pool_size: 4
+
+logging:
+  project: "opsagent-rl"
+  run_name: "ppo_qwen3_8b"
+  log_interval: 10
+  wandb_enabled: true

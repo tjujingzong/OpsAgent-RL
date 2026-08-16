@@ -1,0 +1,31 @@
+# Qwen3-8B policy model config (active).
+#
+# Rollout is served by an external vLLM OpenAI-compatible server:
+#   vllm serve /path/to/Qwen3-8B --host 0.0.0.0 --port 8000 \
+#       --tensor-parallel-size 2 --dtype bfloat16 \
+#       --max-model-len 8192 --gpu-memory-utilization 0.85 --trust-remote-code
+# (process running in the `pd_vllm` conda env, uses 2x A30)
+#
+# verl's rollout worker + eval/benchmark's HTTPBackend both hit this endpoint.
+
+model:
+  name: "Qwen3-8B"
+  hf_path: "/path/to/Qwen3-8B"        # local weights path used by the running server
+  hf_id: "Qwen/Qwen3-8B"               # public id (for re-download)
+  tokenizer: "/path/to/Qwen3-8B"
+  use_flash_attention: true
+  dtype: "bf16"
+
+server:
+  base_url: "http://127.0.0.1:8000/v1"
+  model_name: "/path/to/Qwen3-8B"     # must match the id reported by /v1/models
+  api_key: "EMPTY"
+  temperature: 0.7
+  max_tokens: 4096
+
+context:
+  max_prompt_length: 2048
+  max_new_tokens: 4096
+  history_turns: 16        # keep last 16 conversation turns
+  observation_head: 200   # chars kept from start of long output
+  observation_tail: 300   # chars kept from end of long output
