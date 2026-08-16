@@ -9,7 +9,7 @@
 
 ## 10. 决策记录
 
-- 2026-08-16:模型从 Qwen3.5-9B 切到 **Qwen3-8B**(本机现成可用,权重在 `/path/to/Qwen3-8B`)。所有 train/eval 配置 `defaults: model` 已改为 `qwen3_8b`,`run_name` 同步改名。
+- 2026-08-16:模型从 Qwen3.5-9B 切到 **Qwen3-8B**(本机现成可用)。所有 train/eval 配置 `defaults: model` 已改为 `qwen3_8b`,`run_name` 同步改名。权重路径走环境变量 `MODEL_PATH`(见 §6),仓库不硬编码本地路径。
 - 2026-08-16:训练依赖装在 `opsagent` conda env(Python 3.11),而非 pd_vllm(后者只跑 vllm serve)。
 - 2026-08-16:verl GRPO 集成方案 = 自定义 `OpsAgentLoop(AgentLoopBase)`(一轨迹一容器、loop内算reward,SWE-agent 模式),而非 verl 内置 ToolAgentLoop(后者 BaseTool 每次call create/release、不持久容器、且不调 calc_reward,不适配本任务)。
 - 2026-08-16:实测 2×A30 colocate 全参 8B 的 actor backward 放不下(差~1.5GB);改用 **LoRA(rank=32)** 后 backward 跑通,但 weight-sync 阶段 vllm(10.46GB)+actor(13.1GB)同卡重叠仍差~20MB。colocate-2卡到头,下一步切 **separate 放置**(vllm GPU0/1 TP=2、actor 独占 GPU3)。
@@ -92,15 +92,16 @@ CUDA 13 很新,版本必须严格对齐,否则 torch/vllm 装出来跑不了。�
 
 原计划 Qwen3.5-9B,因本机现成可用的是 Qwen3-8B,改用之(见 `configs/model/qwen3_8b.yaml`)。
 
-- 权重路径: `/path/to/Qwen3-8B`
-- vllm serve(已在 `pd_vllm` env 跑着,别重启):
+- 权重路径: 由环境变量 `$MODEL_PATH` 指向你的本地 Qwen3-8B 目录(仓库不硬编码,避免泄露本地路径)。
+- vllm serve(独立评估用,`pd_vllm` env;verl 训练自己管 vLLM,不需要这个):
   ```
-  vllm serve /path/to/Qwen3-8B --host 0.0.0.0 --port 8000 \
+  export MODEL_PATH=/path/to/Qwen3-8B
+  vllm serve $MODEL_PATH --host 0.0.0.0 --port 8000 \
       --tensor-parallel-size 2 --dtype bfloat16 \
       --max-model-len 8192 --gpu-memory-utilization 0.85 --trust-remote-code
   ```
 - 健康检查: `curl -s http://127.0.0.1:8000/v1/models`
-- model id(填到 config 的 `server.model_name`): `/path/to/Qwen3-8B`
+- model id(填到 config 的 `server.model_name`): 与 `/v1/models` 返回一致(即 `$MODEL_PATH`)
 - eval/benchmark 走 `model_backend.HTTPBackend` 打这个 endpoint;verl rollout worker 也指过来。
 
 ## 7. 关键路径速查
@@ -134,5 +135,5 @@ CUDA 13 很新,版本必须严格对齐,否则 torch/vllm 装出来跑不了。�
 
 ## 10. 决策记录
 
-- 2026-08-16:模型从 Qwen3.5-9B 切到 **Qwen3-8B**(本机现成可用,权重在 `/path/to/Qwen3-8B`)。所有 train/eval 配置 `defaults: model` 已改为 `qwen3_8b`,`run_name` 同步改名。
+- 2026-08-16:模型从 Qwen3.5-9B 切到 **Qwen3-8B**(本机现成可用)。所有 train/eval 配置 `defaults: model` 已改为 `qwen3_8b`,`run_name` 同步改名。权重路径走环境变量 `MODEL_PATH`(见 §6),仓库不硬编码本地路径。
 - 2026-08-16:训练依赖装在 `opsagent` conda env(Python 3.11),而非 pd_vllm(后者只跑 vllm serve)。

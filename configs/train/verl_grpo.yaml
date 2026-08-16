@@ -30,8 +30,8 @@ algorithm:
 
 actor_rollout_ref:
   model:
-    path: /path/to/Qwen3-8B
-    tokenizer_path: /path/to/Qwen3-8B
+    path: ${env:MODEL_PATH}             # set `export MODEL_PATH=/path/to/Qwen3-8B`
+    tokenizer_path: ${env:MODEL_PATH}
   actor:
     use_kl_loss: false
     policy_loss:

@@ -14,7 +14,7 @@ export WANDB_MODE=disabled
 export CUDA_VISIBLE_DEVICES=0,1
 export ray_temp_dir="${ray_temp_dir:-/tmp/opencode/ray}"
 
-MODEL=/path/to/Qwen3-8B
+MODEL="${MODEL:?set MODEL env var to your Qwen3-8B weights dir, e.g.: export MODEL=/path/to/Qwen3-8B}"
 TRAIN_PQ=data/train.parquet
 VAL_PQ=data/val.parquet
 

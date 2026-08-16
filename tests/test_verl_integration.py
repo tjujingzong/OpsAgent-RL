@@ -6,6 +6,7 @@ Exercises one bash-command turn followed by a TASK_COMPLETE turn.
 """
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -17,6 +18,11 @@ from verl.experimental.agent_loop.agent_loop import DictConfigWrap, _agent_loop_
 # importing the module registers "ops_agent"
 import verl_integration.ops_agent_loop as ops_mod
 from verl_integration.ops_agent_loop import OpsAgentLoop
+
+# Real Qwen3 tokenizer is used to validate token/mask wiring. Set
+# OPSAGENT_MODEL_PATH to your local Qwen3-8B dir to exercise this test;
+# skipped otherwise (no personal paths hardcoded in the repo).
+_MODEL_PATH = os.environ.get("OPSAGENT_MODEL_PATH", "")
 
 
 def _build_loop():
@@ -34,7 +40,7 @@ def _build_loop():
                     },
                     "agent": {"num_workers": 4, "default_agent_loop": "ops_agent"},
                 },
-                "model": {"path": "/path/to/Qwen3-8B"},
+                "model": {"path": _MODEL_PATH},
             },
             "data": {
                 "apply_chat_template_kwargs": {},
@@ -45,7 +51,7 @@ def _build_loop():
         }
     )
     tokenizer = pytest.importorskip("transformers").AutoTokenizer.from_pretrained(
-        "/path/to/Qwen3-8B", trust_remote_code=True
+        _MODEL_PATH, trust_remote_code=True
     )
 
     class MockServer:
@@ -68,6 +74,8 @@ def test_ops_agent_loop_registered():
 
 
 def test_run_trajectory_masks_and_reward():
+    if not _MODEL_PATH:
+        pytest.skip("set OPSAGENT_MODEL_PATH to a Qwen3-8B dir to run this test")
     cfg, tokenizer, server = _build_loop()
     # A minimal task record (matches data/*.jsonl shape).
     task_rec = {
