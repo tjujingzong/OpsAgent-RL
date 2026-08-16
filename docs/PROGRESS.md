@@ -5,7 +5,10 @@
 
 ## 1. 一句话状态
 
-代码 / 数据 / Docker 沙盒 / 评估 harness 全部就绪;**verl GRPO 集成已完成并实测跑通训练管线**(rollout→Docker沙盒→OpsAgentLoop→多层奖励→val 指标 step:0 reward/mean@1≈9.4,LoRA actor backward 也跑通)。唯一剩余:colocate(2×A30)vllm↔actor 权重同步阶段差 ~20MB 显存,需切 separate 放置(3 卡:vllm GPU0/1 + actor GPU3)。
+代码 / 数据 / Docker 沙盒 / 评估 harness / verl 集成全部就绪;**GRPO 训练已实测跑通 step:1 并持续训练中**
+(Qwen3.5-4B + LoRA r=32,2×A30 colocate,`actor/perf/max_memory_allocated_gb≈10`,step≈541s/步)。
+rollout→Docker沙盒→OpsAgentLoop→多层奖励→actor update→weight-sync 全链通,`val reward/mean@1≈10`、
+`off_policy/staleness=0`(on-policy 正确)。详见 `docs/VERL_INTEGRATION.md`(11 个坑+解法+显存账+调优方向)。
 
 ## 10. 决策记录
 

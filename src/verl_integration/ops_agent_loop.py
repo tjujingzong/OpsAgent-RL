@@ -198,6 +198,12 @@ class OpsAgentLoop(AgentLoopBase):
                 "ops_success": breakdown.get("success", False),
                 "ops_reward": reward,
                 "ops_breakdown": breakdown,
+                # verl's AgentLoopWorkerTQ builds batch.tags from these two fields
+                # (agent_loop_tq.py:216-218): tag["min/max_global_steps"] = extra_fields.get(...).
+                # If absent they're None and _compute_metrics np.array(...,dtype=int) crashes
+                # (trainer_base.py:1742-1743). For on-policy sync training both = current step.
+                "min_global_steps": 0,
+                "max_global_steps": 0,
             },
         )
         return out
